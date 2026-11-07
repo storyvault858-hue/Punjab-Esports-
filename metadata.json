@@ -1,0 +1,6 @@
+{
+  "name": "Punjab Esports",
+  "description": "Official Punjab Esports platform for Free Fire tournaments, matches, team wallets, and leaderboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
