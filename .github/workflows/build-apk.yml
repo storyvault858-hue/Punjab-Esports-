@@ -34,11 +34,11 @@ jobs:
           echo "Syncing Capacitor Android platform..."
           npx @capacitor/cli sync android
 
-      - name: Setup Temurin Java 17
+      - name: Setup Temurin Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Verify Java environment
         run: |
@@ -51,11 +51,11 @@ jobs:
             exit 1
           fi
           echo "Detected Java Major Version: $JAVA_MAJOR"
-          if [ "$JAVA_MAJOR" -lt 17 ]; then
-            echo "ERROR: Java 17 or higher is required. Found Java $JAVA_MAJOR."
+          if [ "$JAVA_MAJOR" -lt 21 ]; then
+            echo "ERROR: Java 21 or higher is required for Capacitor 8. Found Java $JAVA_MAJOR."
             exit 1
           fi
-          echo "Java environment verified successfully."
+          echo "Java 21 environment verified successfully."
 
       - name: Accept Android SDK licenses
         run: |
@@ -93,6 +93,10 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          if [ -n "$ANDROID_HOME" ] && [ ! -f "local.properties" ]; then
+            echo "sdk.dir=$ANDROID_HOME" > local.properties
+            echo "Configured local.properties with sdk.dir=$ANDROID_HOME"
+          fi
           ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Verify the APK
