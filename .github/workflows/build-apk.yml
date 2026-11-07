@@ -29,9 +29,9 @@ jobs:
         run: |
           echo "Installing npm dependencies..."
           npm install --force --no-audit --no-fund
-          echo "Building Vite web assets..."
+          echo "Building web assets with Vite..."
           npm run build
-          echo "Syncing Capacitor Android platform..."
+          echo "Syncing Capacitor Android..."
           npx @capacitor/cli sync android
 
       - name: Setup Java 21
@@ -40,67 +40,50 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Verify Java environment
-        run: |
-          echo "=== Java Environment ==="
-          java -version
-          echo "JAVA_HOME: $JAVA_HOME"
-
       - name: Accept Android SDK licenses
         run: |
-          echo "Accepting Android SDK licenses..."
           mkdir -p "$HOME/.android"
           yes | sdkmanager --licenses 2>/dev/null || true
 
       - name: Build Debug APK with Gradle
-        id: build_apk
         run: |
           cd android
           chmod +x gradlew
           if [ -n "$ANDROID_HOME" ] && [ ! -f "local.properties" ]; then
             echo "sdk.dir=$ANDROID_HOME" > local.properties
-            echo "Configured local.properties with sdk.dir=$ANDROID_HOME"
           fi
-          echo "Building debug APK..."
-          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee ../gradle-build.log
-
-      - name: Upload Gradle logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-failure-log
-          path: |
-            gradle-build.log
-            android/app/build/reports/
-          if-no-files-found: ignore
+          echo "Running Gradle assembleDebug..."
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Verify the APK
         id: verify_apk
         run: |
-          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
-          if [ ! -f "$APK_PATH" ]; then
-            echo "Searching for generated APKs inside android/app/build/outputs/apk..."
-            DISCOVERED_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
-            if [ -n "$DISCOVERED_APK" ]; then
-              echo "Found APK at $DISCOVERED_APK. Copying to expected path $APK_PATH..."
-              mkdir -p android/app/build/outputs/apk/debug
-              cp "$DISCOVERED_APK" "$APK_PATH"
-            else
-              echo "ERROR: No APK was generated."
-              exit 1
+          echo "Locating generated APK..."
+          EXPECTED_APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$EXPECTED_APK" ]; then
+            FOUND_APK="$EXPECTED_APK"
+          else
+            FOUND_APK=$(find android -type f -name "*debug*.apk" 2>/dev/null | head -n 1)
+            if [ -z "$FOUND_APK" ]; then
+              FOUND_APK=$(find android -type f -name "*.apk" 2>/dev/null | head -n 1)
             fi
           fi
 
-          if [ ! -s "$APK_PATH" ]; then
-            echo "ERROR: APK file exists but is empty (0 bytes)."
+          if [ -z "$FOUND_APK" ] || [ ! -s "$FOUND_APK" ]; then
+            echo "ERROR: Debug APK was not found or is empty."
+            find android -maxdepth 5 -type f -name "*.apk" 2>/dev/null || true
             exit 1
           fi
 
-          APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || wc -c < "$APK_PATH")
-          echo "Verified Debug APK:"
-          echo "  Path: $APK_PATH"
-          echo "  Size: $APK_SIZE bytes"
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found verified Debug APK at: $FOUND_APK"
+          mkdir -p android/app/build/outputs/apk/debug
+          if [ "$FOUND_APK" != "$EXPECTED_APK" ]; then
+            cp "$FOUND_APK" "$EXPECTED_APK"
+          fi
+
+          APK_SIZE=$(stat -c%s "$EXPECTED_APK" 2>/dev/null || wc -c < "$EXPECTED_APK")
+          echo "Verified Debug APK Size: $APK_SIZE bytes"
+          echo "apk_path=$EXPECTED_APK" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
@@ -144,27 +127,13 @@ jobs:
           gh --version
 
           ASSET_PATH="${{ steps.prepare_asset.outputs.asset_path }}"
-          if [ ! -f "$ASSET_PATH" ] || [ ! -s "$ASSET_PATH" ]; then
-            echo "ERROR: Release asset $ASSET_PATH is invalid."
-            exit 1
-          fi
+          RELEASE_TAG="v1.0.0-build-${{ github.run_number }}"
+          RELEASE_TITLE="Punjab Esports Debug APK Build #${{ github.run_number }}"
 
-          RELEASE_TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
-          RELEASE_TITLE="Punjab Esports Debug APK #${{ github.run_number }}"
+          NOTES="### Punjab Esports Debug APK (Build #${{ github.run_number }})
+          Download \`${{ steps.prepare_asset.outputs.asset_filename }}\` directly from the Assets section below."
 
-          NOTES=$(cat <<EOF
-          ### Punjab Esports - Automated Debug APK
-
-          - **Build Run Number:** #${{ github.run_number }}
-          - **Run Attempt:** ${{ github.run_attempt }}
-          - **Commit SHA:** \`${{ github.sha }}\`
-          - **APK Asset:** \`${{ steps.prepare_asset.outputs.asset_filename }}\`
-
-          **Download APK:** You can directly download the \`.apk\` file below under the **Assets** section.
-          EOF
-          )
-
-          echo "Creating GitHub Release with tag: $RELEASE_TAG"
+          echo "Publishing release: $RELEASE_TAG"
           gh release create "$RELEASE_TAG" "$ASSET_PATH" \
             --title "$RELEASE_TITLE" \
             --notes "$NOTES" \
@@ -173,31 +142,14 @@ jobs:
 
       - name: Report APK download result
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           echo "### 📱 Punjab Esports Debug APK Build Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "${{ steps.publish_release.outcome }}" = "success" ]; then
-            RELEASE_TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
+          if [ "${{ steps.verify_apk.outcome }}" = "success" ]; then
+            RELEASE_TAG="v1.0.0-build-${{ github.run_number }}"
             RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${RELEASE_TAG}"
-            ASSET_NAME="${{ steps.prepare_asset.outputs.asset_filename }}"
-
-            echo "✅ **Debug APK successfully published to GitHub Releases!**" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Release Page:** [$RELEASE_TAG]($RELEASE_URL)" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Direct Download:** Go to the release page and download \`$ASSET_NAME\` under the Assets section." >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Backup:** The APK is also preserved in this workflow run as artifact \`app-debug-apk\`." >> "$GITHUB_STEP_SUMMARY"
-
-            echo "Release publish succeeded: $RELEASE_URL"
+            echo "✅ **Debug APK successfully generated!**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Direct Download:** You can download the APK from the [Releases Page]($RELEASE_URL) or under the **Artifacts** tab on this page." >> "$GITHUB_STEP_SUMMARY"
           else
-            if [ -f "gradle-build.log" ] && [ "${{ steps.build_apk.outcome }}" != "success" ]; then
-              echo "❌ **Gradle Build Failed. Error Details:**" >> "$GITHUB_STEP_SUMMARY"
-              echo '```text' >> "$GITHUB_STEP_SUMMARY"
-              tail -n 35 gradle-build.log >> "$GITHUB_STEP_SUMMARY"
-              echo '```' >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "⚠️ **APK was built, but GitHub Release creation encountered an issue.**" >> "$GITHUB_STEP_SUMMARY"
-              echo "- Download from **Artifacts** section: \`app-debug-apk\`." >> "$GITHUB_STEP_SUMMARY"
-            fi
+            echo "❌ **Build encountered an error before APK verification.** Check step logs above." >> "$GITHUB_STEP_SUMMARY"
           fi
