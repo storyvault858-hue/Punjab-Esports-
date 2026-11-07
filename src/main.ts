@@ -9,13 +9,13 @@ import { getDatabase, ref, get, set, update, push, remove, onValue, off, query, 
 import confetti from "canvas-confetti";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBmbL50TdxE1ZBSY0ukcsuGUXwOwZHUnaQ",
-  authDomain: "rendom-cabff.firebaseapp.com",
-  databaseURL: "https://rendom-cabff-default-rtdb.firebaseio.com",
-  projectId: "rendom-cabff",
-  storageBucket: "rendom-cabff.firebasestorage.app",
-  messagingSenderId: "60567816892",
-  appId: "1:60567816892:web:dbd6f7df1d21cb1a079eb9"
+  apiKey: "AIzaSyBTLfhI3c2UBrA5re2UHHj_p1XamO5KWe4",
+  authDomain: "punjab-turnaments.firebaseapp.com",
+  databaseURL: "https://punjab-turnaments-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "punjab-turnaments",
+  storageBucket: "punjab-turnaments.firebasestorage.app",
+  messagingSenderId: "923158197845",
+  appId: "1:923158197845:web:674a90ea877471281286dc"
 };
 
 const app  = initializeApp(firebaseConfig);

@@ -8,9 +8,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "android:sync": "vite build && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/canvas-confetti": "^1.9.0",

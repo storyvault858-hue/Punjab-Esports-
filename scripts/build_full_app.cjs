@@ -523,6 +523,18 @@ scriptContent = scriptContent.replace(
   'import { getDatabase, ref, get, set, update, push, remove, onValue, off, query, orderByChild, equalTo, limitToLast, runTransaction } from "firebase/database";\nimport confetti from "canvas-confetti";'
 );
 
+// Update Firebase Config to user's new punjab-turnaments project
+scriptContent = scriptContent.replace(
+  /apiKey:\s*"AIzaSyBmbL50TdxE1ZBSY0ukcsuGUXwOwZHUnaQ"[^}]+appId:\s*"1:60567816892:web:dbd6f7df1d21cb1a079eb9"/s,
+  `apiKey: "AIzaSyBTLfhI3c2UBrA5re2UHHj_p1XamO5KWe4",
+  authDomain: "punjab-turnaments.firebaseapp.com",
+  databaseURL: "https://punjab-turnaments-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "punjab-turnaments",
+  storageBucket: "punjab-turnaments.firebasestorage.app",
+  messagingSenderId: "923158197845",
+  appId: "1:923158197845:web:674a90ea877471281286dc"`
+);
+
 // Add showSplash function right after hideSplash
 scriptContent = scriptContent.replace(
   "function hideSplash() { splashEl.classList.add('hide'); setTimeout(() => { splashEl.style.display = 'none'; }, 400); }",

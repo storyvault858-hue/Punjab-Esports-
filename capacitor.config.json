@@ -1,0 +1,15 @@
+{
+  "appId": "com.punjab.esports",
+  "appName": "Punjab Esports",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  }
+}
