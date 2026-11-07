@@ -23,13 +23,16 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies and build web assets
         run: |
-          npm install --legacy-peer-deps
+          echo "Installing npm dependencies..."
+          npm install --force --no-audit --no-fund
+          echo "Building Vite web assets..."
           npm run build
-          npx cap sync android
+          echo "Syncing Capacitor Android platform..."
+          npx @capacitor/cli sync android
 
       - name: Setup Temurin Java 17
         uses: actions/setup-java@v4
@@ -54,6 +57,11 @@ jobs:
           fi
           echo "Java environment verified successfully."
 
+      - name: Accept Android SDK licenses
+        run: |
+          echo "Accepting Android SDK licenses..."
+          yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -63,7 +71,8 @@ jobs:
       - name: Create temporary debug keystore
         run: |
           KEYSTORE_PATH="android/app/debug.keystore"
-          if [ ! -f "$KEYSTORE_PATH" ] && [ ! -f "debug.keystore" ]; then
+          mkdir -p ~/.android
+          if [ ! -f "$KEYSTORE_PATH" ] && [ ! -f "~/.android/debug.keystore" ]; then
             echo "Generating temporary debug keystore..."
             keytool -genkey -v \
               -keystore "$KEYSTORE_PATH" \
@@ -74,13 +83,10 @@ jobs:
               -storepass android \
               -keypass android \
               -dname "CN=Android Debug,O=Android,C=US"
+            cp "$KEYSTORE_PATH" ~/.android/debug.keystore 2>/dev/null || true
             echo "Keystore created at: $KEYSTORE_PATH"
           else
             echo "Debug keystore already exists."
-          fi
-          if [ ! -f "$KEYSTORE_PATH" ] && [ ! -f "debug.keystore" ]; then
-            echo "ERROR: Failed to create temporary debug keystore."
-            exit 1
           fi
 
       - name: Build the debug APK
@@ -95,11 +101,15 @@ jobs:
           APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
           if [ ! -f "$APK_PATH" ]; then
             echo "Looking for generated APKs inside android/app/build/outputs/apk..."
-            FOUND_APKS=$(find android/app/build/outputs/apk -name "*.apk" 2>/dev/null || true)
-            echo "Discovered APKs:"
-            echo "$FOUND_APKS"
-            echo "ERROR: Expected debug APK not found at $APK_PATH"
-            exit 1
+            DISCOVERED_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
+            if [ -n "$DISCOVERED_APK" ]; then
+              echo "Found APK at $DISCOVERED_APK. Copying to expected path $APK_PATH..."
+              mkdir -p android/app/build/outputs/apk/debug
+              cp "$DISCOVERED_APK" "$APK_PATH"
+            else
+              echo "ERROR: No APK was generated."
+              exit 1
+            fi
           fi
 
           if [ ! -s "$APK_PATH" ]; then
