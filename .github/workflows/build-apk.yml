@@ -34,7 +34,7 @@ jobs:
           echo "Syncing Capacitor Android platform..."
           npx @capacitor/cli sync android
 
-      - name: Setup Temurin Java 21
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -57,25 +57,28 @@ jobs:
           fi
           echo "Java 21 environment verified successfully."
 
-      - name: Accept Android SDK licenses
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android Licenses and Install Platforms
         run: |
-          echo "Accepting Android SDK licenses..."
+          echo "Accepting Android SDK licenses and installing packages..."
+          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" 2>/dev/null || true
           yes | sdkmanager --licenses 2>/dev/null || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.14.3'
+          build-root-directory: android
           cache-disabled: false
 
-      - name: Create temporary debug keystore
+      - name: Prepare Android Debug Keystore
         run: |
-          KEYSTORE_PATH="android/app/debug.keystore"
-          mkdir -p ~/.android
-          if [ ! -f "$KEYSTORE_PATH" ] && [ ! -f "~/.android/debug.keystore" ]; then
-            echo "Generating temporary debug keystore..."
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            echo "Creating standard Android debug keystore..."
             keytool -genkey -v \
-              -keystore "$KEYSTORE_PATH" \
+              -keystore "$HOME/.android/debug.keystore" \
               -alias androiddebugkey \
               -keyalg RSA \
               -keysize 2048 \
@@ -83,21 +86,32 @@ jobs:
               -storepass android \
               -keypass android \
               -dname "CN=Android Debug,O=Android,C=US"
-            cp "$KEYSTORE_PATH" ~/.android/debug.keystore 2>/dev/null || true
-            echo "Keystore created at: $KEYSTORE_PATH"
+            echo "Standard debug keystore generated."
           else
-            echo "Debug keystore already exists."
+            echo "Debug keystore already present in ~/.android"
           fi
 
       - name: Build the debug APK
+        id: build_apk
         run: |
           cd android
           chmod +x gradlew
           if [ -n "$ANDROID_HOME" ] && [ ! -f "local.properties" ]; then
             echo "sdk.dir=$ANDROID_HOME" > local.properties
-            echo "Configured local.properties with sdk.dir=$ANDROID_HOME"
+            echo "Created local.properties with sdk.dir=$ANDROID_HOME"
           fi
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          echo "Starting Gradle debug assemble..."
+          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee ../gradle-build.log
+
+      - name: Upload Gradle logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-failure-log
+          path: |
+            gradle-build.log
+            android/app/build/reports/
+          if-no-files-found: ignore
 
       - name: Verify the APK
         id: verify_apk
@@ -175,7 +189,7 @@ jobs:
           fi
 
           RELEASE_TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
-          RELEASE_TITLE="Debug APK Build #${{ github.run_number }}"
+          RELEASE_TITLE="Punjab Esports Debug APK #${{ github.run_number }}"
 
           NOTES=$(cat <<EOF
           ### Punjab Esports - Automated Debug APK
@@ -184,9 +198,6 @@ jobs:
           - **Run Attempt:** ${{ github.run_attempt }}
           - **Commit SHA:** \`${{ github.sha }}\`
           - **APK Asset:** \`${{ steps.prepare_asset.outputs.asset_filename }}\`
-          - **Signing:** Temporary Debug Keystore
-
-          > **Note:** This APK is generated automatically by GitHub Actions for testing and device installation. It is not an official Play Store release.
 
           **Download APK:** You can directly download the \`.apk\` file below under the **Assets** section.
           EOF
@@ -219,9 +230,13 @@ jobs:
 
             echo "Release publish succeeded: $RELEASE_URL"
           else
-            echo "⚠️ **APK was built successfully, but GitHub Release creation encountered an error.**" >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Backup Available:** You can still download the APK from the **Artifacts** section of this workflow run: \`app-debug-apk\`." >> "$GITHUB_STEP_SUMMARY"
-            echo "- **Reason:** Check the 'Publish APK to GitHub Releases' step logs above (e.g. repository release permissions or token scope)." >> "$GITHUB_STEP_SUMMARY"
-
-            echo "WARNING: Release creation failed, but artifact app-debug-apk remains available."
+            if [ -f "gradle-build.log" ] && [ "${{ steps.build_apk.outcome }}" != "success" ]; then
+              echo "❌ **Gradle Build Failed. Error Details:**" >> "$GITHUB_STEP_SUMMARY"
+              echo '```text' >> "$GITHUB_STEP_SUMMARY"
+              tail -n 35 gradle-build.log >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "⚠️ **APK was built, but GitHub Release creation encountered an issue.**" >> "$GITHUB_STEP_SUMMARY"
+              echo "- Download from **Artifacts** section: \`app-debug-apk\`." >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
