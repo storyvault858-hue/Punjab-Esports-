@@ -45,62 +45,23 @@ jobs:
           echo "=== Java Environment ==="
           java -version
           echo "JAVA_HOME: $JAVA_HOME"
-          JAVA_MAJOR=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}' | awk -F '.' '{print $1}')
-          if [ -z "$JAVA_MAJOR" ]; then
-            echo "ERROR: Could not detect active Java version."
-            exit 1
-          fi
-          echo "Detected Java Major Version: $JAVA_MAJOR"
-          if [ "$JAVA_MAJOR" -lt 21 ]; then
-            echo "ERROR: Java 21 or higher is required for Capacitor 8. Found Java $JAVA_MAJOR."
-            exit 1
-          fi
-          echo "Java 21 environment verified successfully."
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android Licenses and Install Platforms
+      - name: Accept Android SDK licenses
         run: |
-          echo "Accepting Android SDK licenses and installing packages..."
-          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" 2>/dev/null || true
+          echo "Accepting Android SDK licenses..."
+          mkdir -p "$HOME/.android"
           yes | sdkmanager --licenses 2>/dev/null || true
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          build-root-directory: android
-          cache-disabled: false
-
-      - name: Prepare Android Debug Keystore
-        run: |
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            echo "Creating standard Android debug keystore..."
-            keytool -genkey -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -alias androiddebugkey \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass android \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
-            echo "Standard debug keystore generated."
-          else
-            echo "Debug keystore already present in ~/.android"
-          fi
-
-      - name: Build the debug APK
+      - name: Build Debug APK with Gradle
         id: build_apk
         run: |
           cd android
           chmod +x gradlew
           if [ -n "$ANDROID_HOME" ] && [ ! -f "local.properties" ]; then
             echo "sdk.dir=$ANDROID_HOME" > local.properties
-            echo "Created local.properties with sdk.dir=$ANDROID_HOME"
+            echo "Configured local.properties with sdk.dir=$ANDROID_HOME"
           fi
-          echo "Starting Gradle debug assemble..."
+          echo "Building debug APK..."
           ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee ../gradle-build.log
 
       - name: Upload Gradle logs on failure
@@ -118,7 +79,7 @@ jobs:
         run: |
           APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
           if [ ! -f "$APK_PATH" ]; then
-            echo "Looking for generated APKs inside android/app/build/outputs/apk..."
+            echo "Searching for generated APKs inside android/app/build/outputs/apk..."
             DISCOVERED_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
             if [ -n "$DISCOVERED_APK" ]; then
               echo "Found APK at $DISCOVERED_APK. Copying to expected path $APK_PATH..."
